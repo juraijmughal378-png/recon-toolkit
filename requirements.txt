@@ -1,0 +1,28 @@
+# Recon Toolkit Pro v3.2 Ultra — Requirements
+
+# Core HTTP
+requests>=2.31.0
+urllib3>=2.0.0
+
+# DNS
+dnspython>=2.4.0
+
+# WHOIS
+python-whois>=0.9.2
+
+# HTML parsing
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Terminal UI
+rich>=13.7.0
+
+# SSL/TLS
+pyOpenSSL>=23.3.0
+certifi>=2023.11.17
+
+# Optional: Shodan
+shodan>=1.31.0
+
+# Optional: async speedup
+aiohttp>=3.9.0
