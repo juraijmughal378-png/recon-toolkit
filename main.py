@@ -1,6 +1,6 @@
 """
 main.py — Recon Toolkit Pro v3.2 Ultra
-31 modules — OSINT + Attack + Network + AI + Exploit + Dashboard
+31 modules + Stealth + Profiles + Notifications + Config
 """
 
 import os
@@ -8,6 +8,8 @@ import sys
 import time
 from typing import Dict, Optional
 
+from modules.config import load_config, get, get_profile, is_stealth_mode
+from modules.notify import get_notifier
 from ui.rich_ui import (
     console, print_banner, info, warning, error, success
 )
@@ -15,6 +17,9 @@ from reports.report_gen import save_all
 from rich.rule import Rule
 from rich.table import Table
 from rich import box
+
+# Load config on startup
+load_config()
 
 RECON_MODULES = [
     ("1",  "🔍 Subdomain Enum",      "15-source + DNS brute + permutations"),
@@ -52,11 +57,19 @@ POWER_MODULES = [
     ("27", "💣 Exploit Suggester",   "CVE + port + tech → MSF + PoC auto-map"),
 ]
 ULTRA_MODULES = [
-    ("28", "⚛  Nuclei Scanner",      "5000+ templates | CVE + misconfig + panels"),
-    ("29", "🗺  Nmap Scanner",        "Full NSE scripts + OS detect + vuln scan"),
-    ("30", "🌐 Web Dashboard",       "Live browser dashboard + real-time monitor"),
-    ("31", "📸 Auto Screenshots",    "Headless browser + bulk capture + gallery"),
+    ("28", "⚛  Nuclei Scanner",      "5000+ templates | CVE + misconfig"),
+    ("29", "🗺  Nmap Scanner",        "Full NSE scripts + OS detect + vuln"),
+    ("30", "🌐 Web Dashboard",       "Live browser dashboard + monitor"),
+    ("31", "📸 Auto Screenshots",    "Headless browser + bulk + gallery"),
 ]
+
+PROFILES = {
+    "bb":      ("Bug Bounty",   [1,2,3,8,9,11,12,13,14,15,16,17,18,19,20,21,22,23]),
+    "pentest": ("Pentest",      [1,2,3,5,6,7,8,9,10,11,12,16,17,18,19,24,25,26,27,28,29]),
+    "ctf":     ("CTF",          [1,2,3,8,9,12,16,17,18,19,20,21]),
+    "quick":   ("Quick Recon",  [1,2,3,8,9,10]),
+    "stealth": ("Stealth OSINT",[1,3,4,6,14]),
+}
 
 
 def _print_menu():
@@ -77,24 +90,43 @@ def _print_menu():
             t.add_row(n1,nm1,d1,n2,nm2,d2)
         console.print(t)
 
-    _tbl("RECON (1-10)",    RECON_MODULES,    "cyan")
-    _tbl("ADVANCED (11-15)",ADVANCED_MODULES, "magenta")
-    _tbl("ATTACK (16-23)",  ATTACK_MODULES,   "red")
-    _tbl("POWER (24-27)",   POWER_MODULES,    "yellow")
-    _tbl("ULTRA (28-31)",   ULTRA_MODULES,    "green")
+    _tbl("RECON (1-10)",     RECON_MODULES,    "cyan")
+    _tbl("ADVANCED (11-15)", ADVANCED_MODULES, "magenta")
+    _tbl("ATTACK (16-23)",   ATTACK_MODULES,   "red")
+    _tbl("POWER (24-27)",    POWER_MODULES,    "yellow")
+    _tbl("ULTRA (28-31)",    ULTRA_MODULES,    "green")
 
     console.print()
     console.print(Rule(style="dim"))
+
+    # Special options + profiles
     sp = Table(box=box.SIMPLE, show_header=False, pad_edge=False, padding=(0,2))
-    for c in ["n","nm","d","n2","nm2","d2"]:
-        sp.add_column(c, width=4 if c in ("n","n2") else 24 if "nm" in c else 38,
-                      justify="right" if c in ("n","n2") else "left",
-                      style="bold yellow" if c in ("n","n2") else "")
-    sp.add_row("88","[bold green]⚡ Full Recon[/bold green]",   "[green]Modules 1-10[/green]",
-               "99","[bold blue]⚙  Custom[/bold blue]",         "[blue]Pick any modules[/blue]")
-    sp.add_row("00","[bold red]🔥 Full Attack[/bold red]",      "[red]ALL 31 modules[/red]",
-               "0", "[bold red]✖  Exit[/bold red]",             "")
+    for _ in range(6): sp.add_column(width=14)
+    sp.add_row(
+        "[bold yellow]88[/bold yellow]","[bold green]⚡ Full Recon[/bold green]",
+        "[bold yellow]00[/bold yellow]","[bold red]🔥 Full Attack[/bold red]",
+        "[bold yellow]99[/bold yellow]","[bold blue]⚙  Custom[/bold blue]",
+    )
+    sp.add_row(
+        "[bold yellow]bb[/bold yellow]","[cyan]Bug Bounty[/cyan]",
+        "[bold yellow]pt[/bold yellow]","[cyan]Pentest[/cyan]",
+        "[bold yellow]ctf[/bold yellow]","[cyan]CTF Mode[/cyan]",
+    )
+    sp.add_row(
+        "[bold yellow]qs[/bold yellow]","[cyan]Quick Scan[/cyan]",
+        "[bold yellow]st[/bold yellow]","[cyan]Stealth OSINT[/cyan]",
+        "[bold yellow]0[/bold yellow]","[red]✖ Exit[/red]",
+    )
     console.print(sp)
+
+    # Status indicators
+    stealth_on = is_stealth_mode()
+    notif_on   = get("notifications", "enabled", False)
+    console.print(
+        f"\n  [dim]Stealth:[/dim] {'[green]ON[/green]' if stealth_on else '[red]OFF[/red]'}  "
+        f"[dim]Notifications:[/dim] {'[green]ON[/green]' if notif_on else '[red]OFF[/red]'}  "
+        f"[dim]Config:[/dim] [cyan]config.yaml[/cyan]"
+    )
     console.print()
 
 
@@ -204,54 +236,123 @@ def _run_module(num: str, target: str, all_results: Dict) -> Optional[Dict]:
         return None
 
 
+def _run_modules(mods: list, target: str, all_results: Dict, label: str = ""):
+    total = len(mods)
+    notifier = get_notifier()
+    notifier.scan_started(target)
+
+    for i, mod in enumerate(mods, 1):
+        console.rule(f"[bold cyan]Module {mod} ({i}/{total}) {label}[/bold cyan]")
+        result = _run_module(str(mod), target, all_results)
+
+        # Notify critical findings
+        for key in ["xss","sqli","lfi","ssrf","ssti","xxe"]:
+            if str(mod) in {"16":"xss","17":"sqli","18":"lfi","19":"ssrf","21":"ssti","20":"xxe"}.get(str(mod),{}):
+                findings = (result or {}).get("findings", [])
+                for f in findings:
+                    if f.get("severity") in ("CRITICAL","HIGH"):
+                        notifier.critical_finding(target, f)
+
+
 def main():
     print_banner()
     while True:
         _print_menu()
-        choice = console.input(" [bold yellow]Select[/bold yellow] [bold cyan]>[/bold cyan] ").strip()
-        if choice=="0":
+        choice = console.input(" [bold yellow]Select[/bold yellow] [bold cyan]>[/bold cyan] ").strip().lower()
+
+        if choice == "0":
             console.print("\n[bold cyan]Goodbye![/bold cyan]\n"); sys.exit(0)
-        valid=[str(i) for i in range(1,32)]+["88","99","00"]
+
+        valid = [str(i) for i in range(1,32)] + ["88","99","00","bb","pt","ctf","qs","st"]
         if choice not in valid:
             warning(f"Invalid: {choice}"); continue
-        target=console.input("\n [bold cyan]Target[/bold cyan] [dim](domain/IP/network)[/dim] [bold cyan]>[/bold cyan] ").strip()
+
+        target = console.input(
+            "\n [bold cyan]Target[/bold cyan] [dim](domain/IP/network)[/dim] [bold cyan]>[/bold cyan] "
+        ).strip()
         if not target:
             warning("No target provided"); continue
-        console.print(f"\n  [bold green]Target:[/bold green] [bold]{target}[/bold]\n")
-        all_results:Dict={"_target":target,"_started":time.strftime("%Y-%m-%d %H:%M:%S")}
-        start_time=time.time()
-        if choice=="88":
+
+        console.print(f"\n  [bold green]Target:[/bold green] [bold]{target}[/bold]")
+        if is_stealth_mode():
+            console.print("  [yellow]⚠ Stealth mode active — slower but quieter[/yellow]")
+        console.print()
+
+        all_results: Dict = {
+            "_target":  target,
+            "_started": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        start_time = time.time()
+
+        # Profile & mode selection
+        if choice == "88":
             info("Full Recon — modules 1-10")
-            for i in range(1,11):
-                console.rule(f"[bold cyan]Module {i}/10[/bold cyan]")
-                _run_module(str(i),target,all_results)
-        elif choice=="00":
+            _run_modules(list(range(1,11)), target, all_results, "Full Recon")
+
+        elif choice == "00":
             info("Full Attack — all 31 modules")
-            for i in range(1,32):
-                console.rule(f"[bold red]Module {i}/31[/bold red]")
-                _run_module(str(i),target,all_results)
-        elif choice=="99":
-            console.print(" [dim]Enter module numbers  e.g. 1 2 28 29 31[/dim]")
-            line=console.input(" [bold yellow]Modules[/bold yellow] [bold cyan]>[/bold cyan] ").strip()
-            mods=[x.strip() for x in line.split() if x.strip().isdigit()]
-            for mod in mods:
-                if mod in [str(i) for i in range(1,32)]:
-                    console.rule(f"[bold cyan]Module {mod}[/bold cyan]")
-                    _run_module(mod,target,all_results)
+            _run_modules(list(range(1,32)), target, all_results, "Full Attack")
+
+        elif choice == "bb":
+            name, mods = PROFILES["bb"]
+            info(f"Profile: {name}")
+            _run_modules(mods, target, all_results, name)
+
+        elif choice == "pt":
+            name, mods = PROFILES["pentest"]
+            info(f"Profile: {name}")
+            _run_modules(mods, target, all_results, name)
+
+        elif choice == "ctf":
+            name, mods = PROFILES["ctf"]
+            info(f"Profile: {name}")
+            _run_modules(mods, target, all_results, name)
+
+        elif choice == "qs":
+            name, mods = PROFILES["quick"]
+            info(f"Profile: {name}")
+            _run_modules(mods, target, all_results, name)
+
+        elif choice == "st":
+            name, mods = PROFILES["stealth"]
+            info(f"Profile: {name} — passive only")
+            _run_modules(mods, target, all_results, name)
+
+        elif choice == "99":
+            console.print(" [dim]Enter module numbers  e.g. 1 2 28 29[/dim]")
+            line = console.input(" [bold yellow]Modules[/bold yellow] [bold cyan]>[/bold cyan] ").strip()
+            mods = [int(x) for x in line.split() if x.strip().isdigit() and 1 <= int(x) <= 31]
+            _run_modules(mods, target, all_results, "Custom")
         else:
-            _run_module(choice,target,all_results)
-        elapsed=time.time()-start_time
-        all_results["_elapsed"]=f"{elapsed:.1f}s"
-        if len(all_results)>3:
+            _run_module(choice, target, all_results)
+
+        elapsed = time.time() - start_time
+        all_results["_elapsed"] = f"{elapsed:.1f}s"
+
+        # Scan complete notification
+        notifier = get_notifier()
+        summary = {
+            "open_ports": len(all_results.get("portscan",{}).get("tcp_open",[])),
+            "total_cves": all_results.get("cve",{}).get("total",0),
+            "web_vulns":  sum(all_results.get(k,{}).get("total",0)
+                             for k in ["xss","sqli","lfi","ssrf","xxe","ssti","idor"]),
+            "risk_score": all_results.get("ai",{}).get("risk_score",0),
+            "risk_level": all_results.get("ai",{}).get("risk_level","—"),
+        }
+        notifier.scan_complete(target, summary)
+
+        if len(all_results) > 3:
             console.rule("[bold green]Complete[/bold green]")
             console.print(f"\n  [bold green]Elapsed:[/bold green] {elapsed:.1f}s\n")
-            save=console.input("  [bold cyan]Save HTML report?[/bold cyan] [y/N] > ").strip().lower()
-            if save in("y","yes"):
-                save_all(all_results,target)
+            save = console.input(
+                "  [bold cyan]Save HTML report?[/bold cyan] [y/N] > "
+            ).strip().lower()
+            if save in ("y","yes"):
+                save_all(all_results, target)
         console.print()
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
