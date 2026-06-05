@@ -100,7 +100,7 @@ _SIG_B64 = {
     "/proc/version":      "TGludXggdmVyc2lvbg==",  # Linux version
     "win.ini":            "W2ZvbnRzXQ==",          # [fonts]
     "boot.ini":           "W2Jvb3QgbG9hZGVyXQ==", # [boot loader]
-]
+}
 
 LFI_SIGNATURES = {k: base64.b64decode(v + "==").decode(errors="ignore")
                   for k, v in _SIG_B64.items()}

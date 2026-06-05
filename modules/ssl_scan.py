@@ -306,7 +306,7 @@ def _calculate_grade(
     if cert_info.get("is_self_signed"):
         grade = "T"
         reasons.append("T: Self-signed certificate")
-    if cert_info.get("days_remaining", 999) < 14:
+    if (cert_info.get("days_remaining") or 999) < 14:
         grade = "B" if grade == "A+" else grade
         reasons.append(f"Deduction: Certificate expires in {cert_info.get('days_remaining')} days")
 

@@ -167,7 +167,7 @@ def _run_nuclei(target: str, tags: List[str] = None,
 
     # Output file
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
-                                     delete=False, suffix=".jsonl") as f:
+                                     delete=False) as f:
         outfile = f.name
 
     cmd += ["-output", outfile]
